@@ -1,13 +1,12 @@
-require 'byebug'
-require 'securerandom'
-require './database'
+require './record'
+require './role'
 
 # Implementar validaciones, que previo a guardar o updetear, se garantice
 # name, lastname, username, password esten presentes.
 # Password no se menos a 8 caracteres e incluya al menos una mayuscula y un numero.
 
-class User
-  attr_accessor :id, :name, :lastname, :username, :password, :token
+class User < Record
+  attr_accessor :id, :name, :lastname, :username, :password, :token, :role_id
 
   def initialize(params = {})
     @id = params[:id]
@@ -16,6 +15,16 @@ class User
     @username = params[:username]
     @password = params[:password]
     @token = params[:token]
+    @role_id = params[:role_id]
+    super(params)
+  end
+
+  def role
+    Role.find(@role_id)
+  end
+
+  def role=(role_model)
+    @role_id = role_model.id
   end
 
   def signin!
@@ -32,23 +41,33 @@ class User
       lastname: @lastname,
       username: @username,
       password: @password,
-      token: @token }
+      token: @token,
+      role_id: @role_id}
   end
 
-  def save
-    if @id.nil?
-      @id = Database.insert('users', attributes)
-    else
-      update
-    end
+  def validate_format_password
+    return if @password.to_s.match?(/[A-Z]/) && @password.to_s.match?(/[0-9]/)
+
+    initialize_key_error(:password)
+    @errors.details[attr] += [{ error: :format }]
   end
 
-  def update
-    Database.update('users', attributes)
+  def valid?
+    @errors.details = {}
+
+    validate_presence([:name, :lastname, :username, :password])
+    validate_length({ password: 8 })
+    validate_format_password
+
+    @errors.details.empty?
   end
 
-  def destroy
-    # IMPLEMENTAR
+  def table_name
+    self.class.table_name
+  end
+
+  def self.table_name
+    'users'
   end
 
   def self.build_instance(tuples)
@@ -58,19 +77,8 @@ class User
                 lastname: tupla[2],
                 username: tupla[3],
                 password: tupla[4],
-                token: tupla[5]})
+                token: tupla[5],
+                role_id: tupla[6]})
     end
-  end
-
-  def self.first
-    build_instance(Database.first('users')).first
-  end
-
-  def self.last
-    build_instance(Database.last('users')).first
-  end
-
-  def self.all
-    build_instance(Database.all('users'))
   end
 end
